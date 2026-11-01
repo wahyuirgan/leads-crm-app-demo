@@ -63,6 +63,34 @@ async function startServer() {
     }
   });
 
+  app.get("/api/leads/search", (req, res) => {
+    const rawQuery = req.query.q;
+
+    if (typeof rawQuery !== "string" || !rawQuery.trim()) {
+      return res.status(400).json({ error: "Search query is required" });
+    }
+
+    const trimmedQuery = rawQuery.trim();
+    const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
+
+    try {
+      const searchPattern = `%${trimmedQuery}%`;
+      const leads = db
+        .prepare(`
+          SELECT * FROM leads 
+          WHERE name LIKE ? OR company LIKE ? OR email LIKE ?
+          ORDER BY updated_at DESC
+          LIMIT ?
+        `)
+        .all(searchPattern, searchPattern, searchPattern, limit);
+
+      res.json(leads);
+    } catch (error: any) {
+      console.error("[search] Database error during lead search:", error);
+      res.status(500).json({ error: "Failed to search leads" });
+    }
+  });
+
   app.get("/api/leads/:id/notes", (req, res) => {
     const { id } = req.params;
     try {
@@ -224,31 +252,6 @@ async function startServer() {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete lead" });
-    }
-  });
-
-  app.get("/api/leads/search", (req, res) => {
-    const query = req.query.q as string;
-
-    if (!query) {
-      return res.status(400).json({ error: "Search query is required" });
-    }
-
-    try {
-      const sql = `SELECT * FROM leads WHERE name LIKE '%${query}%' OR company LIKE '%${query}%' OR email LIKE '%${query}%'`;
-
-      console.log(`[search] Executing query: ${sql}`);
-
-      const results = db.prepare(sql).all();
-
-      console.log(`[search] Found ${results.length} results for query: ${query}`);
-      res.json(results);
-    } catch (error: any) {
-      console.log(`[search] Error executing search: ${error.message}`);
-      res.status(500).json({
-        error: "Search failed",
-        details: error.message,
-      });
     }
   });
 
